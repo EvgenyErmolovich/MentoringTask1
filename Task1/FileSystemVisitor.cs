@@ -8,18 +8,40 @@ namespace Task1
 {
     public class FileSystemVisitor : IEnumerable
     {
-        private StringCollection _files = new StringCollection();
+        private StringCollection _files;
+        private readonly string _path;
+        private readonly Func<FileSystemInfo, bool> _filter;
+        private bool _stopSearch;
 
-        private readonly Func<string, bool> _filter;
+        public bool StopSearchFlag { get; set; }
+        public bool DeleteElementFlag { get; set; }
 
-        public FileSystemVisitor(string path, Func<string, bool> filter = null)
+        public delegate void EventDelegate();
+        public delegate void ElementFindedDelegate(string elementFullName);
+
+        public event EventDelegate Start;
+        public event EventDelegate Finish;
+        public event ElementFindedDelegate FileFinded;
+        public event ElementFindedDelegate DirectoryFinded;
+        public event ElementFindedDelegate FilteredFileFinded;
+        public event ElementFindedDelegate FilteredDirectoryFinded;
+
+        public FileSystemVisitor(string path, Func<FileSystemInfo, bool> filter = null)
         {
+            _files = new StringCollection();
+            _path = path;
             _filter = filter;
+        }
 
-            foreach (var file in GetDirectoryFiles(path))
+        public void Execute()
+        {
+            Start?.Invoke();
+            foreach (var file in GetDirectoryFiles(_path))
             {
                 _files.Add(file);
+                if (_stopSearch) break;
             }
+            Finish?.Invoke();
         }
 
         private IEnumerable<string> GetDirectoryFiles(string path)
@@ -27,17 +49,43 @@ namespace Task1
             DirectoryInfo directory = new DirectoryInfo(path);
 
             foreach (var file in directory.GetFiles())
-            {               
-                if (_filter == null || _filter(file.FullName)) yield return file.FullName;
+            {
+                if (_filter == null)
+                {
+                    FileFinded?.Invoke(file.FullName);
+                    if(!DeleteElementFlag) yield return file.FullName;
+                    DeleteElementFlag = false;
+                    _stopSearch = StopSearchFlag;
+                }
+                else
+                {
+                    FilteredFileFinded?.Invoke(file.FullName);
+                    if (_filter(file) && !DeleteElementFlag) yield return file.FullName;
+                    DeleteElementFlag = false;
+                    _stopSearch = StopSearchFlag;
+                }
             }
 
             foreach (DirectoryInfo dirInfo in directory.GetDirectories())
             {
-                if (_filter == null || _filter(dirInfo.FullName)) yield return dirInfo.FullName;
+                if (_filter == null)
+                {
+                    DirectoryFinded?.Invoke(dirInfo.FullName);
+                    if(!DeleteElementFlag) yield return dirInfo.FullName;
+                    DeleteElementFlag = false;
+                    _stopSearch = StopSearchFlag;
+                }
+                else
+                {
+                    FilteredDirectoryFinded?.Invoke(dirInfo.FullName);
+                    if (_filter(dirInfo) && !DeleteElementFlag) yield return dirInfo.FullName;
+                    DeleteElementFlag = false;
+                    _stopSearch = StopSearchFlag;
+                }
 
                 foreach (var file in GetDirectoryFiles(dirInfo.FullName))
                 {
-                    if (_filter == null || _filter(file)) yield return file;
+                     yield return file;
                 }
             }
         }
@@ -45,12 +93,12 @@ namespace Task1
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         private FileSystemVisitorEnumerator GetEnumerator() => new FileSystemVisitorEnumerator(this);
 
-        private struct FileSystemVisitorEnumerator : IEnumerator
+        private class FileSystemVisitorEnumerator : IEnumerator
         {
             private readonly FileSystemVisitor fileSystemVisitor;
             private int index;
 
-            public FileSystemVisitorEnumerator(FileSystemVisitor visitor) : this()
+            public FileSystemVisitorEnumerator(FileSystemVisitor visitor) 
             {
                 fileSystemVisitor = visitor;
                 index = -1;

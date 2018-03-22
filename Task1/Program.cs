@@ -12,7 +12,9 @@ namespace Task1
         static void Main(string[] args)
         {
             string rootDir = @"C:\Users\Evgeny_Ermolovich\Desktop\Training\CreateDB";
+
             FileSystemVisitor a = new FileSystemVisitor(rootDir);
+            a.Execute();
             
             foreach (var item in a)
             {
